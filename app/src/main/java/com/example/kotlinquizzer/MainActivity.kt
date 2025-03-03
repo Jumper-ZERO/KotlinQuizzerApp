@@ -1,6 +1,9 @@
 package com.example.kotlinquizzer
 
+import android.content.Context
+import android.content.Intent
 import android.os.Bundle
+import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.compose.foundation.clickable
@@ -9,15 +12,23 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
+import java.io.File
 
 data class Question(val text: String, val options: List<String>)
-data class Quiz(val id: Int, val name: String, val questions: List<Question>)
+data class Quiz(
+    val id: Int,
+    val name: String,
+    val questions: List<Question>,
+    val responses: List<String> = emptyList()
+)
 
 fun parseQuizText(quizText: String): List<Question> {
     val questions = mutableListOf<Question>()
@@ -95,12 +106,18 @@ fun QuizApp() {
     }
 
     var quizNameInput by remember { mutableStateOf("Mi Quiz") }
+    val context = LocalContext.current
 
     when (currentScreen) {
         "home" -> HomeScreen(
             quizzes = quizzes,
             onNewQuiz = { currentScreen = "input" },
-            onQuizSelected = { quiz -> selectedQuiz = quiz; currentScreen = "quiz" }
+            onQuizSelected = { quiz ->
+                selectedQuiz = quiz
+                currentScreen = "quiz"
+            },
+            onShareQuiz = { quiz -> shareQuiz(context, quiz) },
+            onDownloadQuiz = { quiz -> downloadQuizAsTxt(context, quiz) }
         )
 
         "input" -> QuizInputScreen(
@@ -127,7 +144,11 @@ fun QuizApp() {
 
         "quiz" -> {
             selectedQuiz?.let { quiz ->
-                QuizViewScreen(quiz = quiz, onFinish = { currentScreen = "home" })
+                QuizViewScreen(quiz = quiz, onFinish = { responses ->
+                    val updateQuiz = quiz.copy(responses = responses)
+                    quizzes = quizzes.map { if (it.id == updateQuiz.id) updateQuiz else it }
+                    currentScreen = "home"
+                })
             }
         }
     }
@@ -137,8 +158,11 @@ fun QuizApp() {
 fun HomeScreen(
     quizzes: List<Quiz>,
     onNewQuiz: () -> Unit,
-    onQuizSelected: (Quiz) -> Unit
+    onQuizSelected: (Quiz) -> Unit,
+    onShareQuiz: (Quiz) -> Unit,
+    onDownloadQuiz: (Quiz) -> Unit
 ) {
+    val context = LocalContext.current
     Scaffold(
         floatingActionButton = {
             FloatingActionButton(onClick = onNewQuiz) {
@@ -157,17 +181,59 @@ fun HomeScreen(
             } else {
                 LazyColumn {
                     items(quizzes) { quiz ->
-                        Card(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(8.dp)
-                                .clickable { onQuizSelected(quiz) }) {
-                            Text(
-                                text = quiz.name,
-                                modifier = Modifier.padding(16.dp)
-                            )
-                        }
+                        QuizListItem(
+                            quiz = quiz,
+                            onQuizSelected = { onQuizSelected(quiz) },
+                            onShareQuiz = { onShareQuiz(quiz) },
+                            onDownloadQuiz = { onDownloadQuiz(quiz) }
+                        )
                     }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+fun QuizListItem(
+    quiz: Quiz,
+    onQuizSelected: () -> Unit,
+    onShareQuiz: () -> Unit,
+    onDownloadQuiz: () -> Unit
+) {
+    var expanded by remember { mutableStateOf(false) }
+    Card(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(8.dp)
+            .clickable { onQuizSelected() }
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(16.dp),
+            horizontalArrangement = Arrangement.SpaceBetween
+        ) {
+            Text(text = quiz.name)
+            Box {
+                IconButton(onClick = { expanded = true }) {
+                    Icon(Icons.Default.MoreVert, contentDescription = "Opciones")
+                }
+                DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
+                    DropdownMenuItem(
+                        text = { Text("Compartir") },
+                        onClick = {
+                            expanded = false
+                            onShareQuiz()
+                        }
+                    )
+                    DropdownMenuItem(
+                        text = { Text("Descargar .txt") },
+                        onClick = {
+                            expanded = false
+                            onDownloadQuiz()
+                        }
+                    )
                 }
             }
         }
@@ -217,7 +283,7 @@ fun QuizInputScreen(
             Row {
                 Button(
                     onClick = onStartQuiz,
-                    enabled = quizTextInput.isNotBlank() && quizTextInput.isNotEmpty()
+                    enabled = quizTextInput.isNotBlank() && quizTextInput.isNotBlank()
                 ) {
                     Text("Generar Quiz")
                 }
@@ -230,13 +296,14 @@ fun QuizInputScreen(
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun QuizViewScreen(quiz: Quiz, onFinish: () -> Unit) {
+fun QuizViewScreen(quiz: Quiz, onFinish: (List<String>) -> Unit) {
     var currentQuestionIndex by remember { mutableIntStateOf(0) }
     var selectedOption by remember { mutableStateOf<String?>(null) }
+    val responses = remember { mutableStateListOf<String>() }
 
     Scaffold(
         topBar = {
-            TopAppBar(title = { Text("Quiz ${quiz.name}") })
+            TopAppBar(title = { Text("Quiz: ${quiz.name}") })
         }
     ) { padding ->
         if (currentQuestionIndex < quiz.questions.size) {
@@ -266,6 +333,7 @@ fun QuizViewScreen(quiz: Quiz, onFinish: () -> Unit) {
                 Button(
                     onClick = {
                         if (selectedOption != null) {
+                            responses.add(selectedOption!!)
                             currentQuestionIndex++
                             selectedOption = null
                         }
@@ -276,6 +344,7 @@ fun QuizViewScreen(quiz: Quiz, onFinish: () -> Unit) {
                 }
             }
         } else {
+            onFinish(responses)
             Column(
                 modifier = Modifier
                     .padding(padding)
@@ -284,13 +353,49 @@ fun QuizViewScreen(quiz: Quiz, onFinish: () -> Unit) {
                 horizontalAlignment = Alignment.CenterHorizontally
             ) {
                 Text("¡Has terminado el quiz!", style = MaterialTheme.typography.titleMedium)
-                Spacer(modifier = Modifier.height(16.dp))
-                Button(onClick = onFinish) {
-                    Text("Finalizar")
-                }
+//                Spacer(modifier = Modifier.height(16.dp))
+//                Button(onClick = onFinish) {
+//                    Text("Finalizar")
+//                }
             }
         }
     }
+}
+
+fun shareQuiz(context: Context, quiz: Quiz) {
+    val shareText = buildString {
+        quiz.questions.forEachIndexed { index, question ->
+            append("${index + 1}. ${question.text}\n")
+            if (quiz.responses.size > index) {
+                append("Respuesta: ${quiz.responses[index]}\n\n")
+            } else {
+                append("Respuesta: \n\n")
+            }
+        }
+    }
+    val shareIntent = Intent(Intent.ACTION_SEND).apply {
+        type = "text/plain"
+        putExtra(Intent.EXTRA_TEXT, shareText)
+    }
+    context.startActivity(Intent.createChooser(shareIntent, "Compartir Quiz"))
+}
+
+fun downloadQuizAsTxt(context: Context, quiz: Quiz) {
+    val fileContent = buildString {
+        quiz.questions.forEachIndexed { index, question ->
+            append("${index + 1}. ${question.text}\n")
+            if (quiz.responses.size > index) {
+                append("Respuesta: ${quiz.responses[index]}\n\n")
+            } else {
+                append("Respuesta: \n\n")
+            }
+        }
+    }
+    val fileName = "${quiz.name}.txt"
+    // Se guarda el archivo en el directorio externo de la aplicación.
+    val file = File(context.getExternalFilesDir(null), fileName)
+    file.writeText(fileContent)
+    Toast.makeText(context, "Archivo descargado en: ${file.absolutePath}", Toast.LENGTH_LONG).show()
 }
 
 @Preview(showBackground = true)
