@@ -100,23 +100,7 @@ fun QuizApp() {
     var quizNameInput by remember { mutableStateOf("") }
     var editingQuiz by remember { mutableStateOf<Quiz?>(null) }
     val scope = rememberCoroutineScope()
-    var quizTextInput by remember {
-        mutableStateOf(
-            """
-        # ¿Qué palabra clave se usa para declarar una variable inmutable en Kotlin?
-        - var
-        - let
-        - val
-        - const
-
-        1. ¿Cuál es la función principal que se ejecuta en un programa Kotlin?
-        • init
-        • start
-        • main
-        • run
-        """.trimIndent()
-        )
-    }
+    var quizTextInput by remember { mutableStateOf("") }
 
     // Carga los quizzes desde la base de datos al iniciar la app
     LaunchedEffect(Unit) {
