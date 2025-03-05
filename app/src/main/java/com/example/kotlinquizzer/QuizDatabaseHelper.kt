@@ -44,7 +44,7 @@ class QuizDatabaseHelper(context: Context) :
         onCreate(db)
     }
 
-    private fun questionToJson(question: List<Question>): String {
+    private fun questionsToJson(question: List<Question>): String {
         val jsonArray = JSONArray()
         for (q in question) {
             val obj = JSONObject()
@@ -95,7 +95,7 @@ class QuizDatabaseHelper(context: Context) :
         val db = writableDatabase
         val values = ContentValues().apply {
             put(COLUMN_NAME, quiz.name)
-            put(COLUMN_QUESTIONS, questionToJson(quiz.questions))
+            put(COLUMN_QUESTIONS, questionsToJson(quiz.questions))
             put(COLUMN_RESPONSES, responsesToJson(quiz.responses))
         }
         val id = db.insert(TABLE_QUIZZES, null, values)
@@ -107,10 +107,17 @@ class QuizDatabaseHelper(context: Context) :
         val db = writableDatabase
         val values = ContentValues().apply {
             put(COLUMN_NAME, quiz.name)
-            put(COLUMN_QUESTIONS, questionToJson(quiz.questions))
+            put(COLUMN_QUESTIONS, questionsToJson(quiz.questions))
             put(COLUMN_RESPONSES, responsesToJson(quiz.responses))
         }
         val rows = db.update(TABLE_QUIZZES, values, "$COLUMN_ID=?", arrayOf(quiz.id.toString()))
+        db.close()
+        return rows
+    }
+
+    fun deleteQuiz(quizId: Int): Int {
+        val db = writableDatabase
+        val rows = db.delete(TABLE_QUIZZES, "$COLUMN_ID = ?", arrayOf(quizId.toString()))
         db.close()
         return rows
     }

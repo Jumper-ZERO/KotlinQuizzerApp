@@ -1,8 +1,11 @@
 package com.example.kotlinquizzer
 
+import android.content.ContentValues
 import android.content.Context
 import android.content.Intent
 import android.os.Bundle
+import android.os.Environment
+import android.provider.MediaStore
 import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
@@ -68,12 +71,22 @@ fun parseQuizText(quizText: String): List<Question> {
     return questions
 }
 
+fun generateQuizText(quiz: Quiz): String {
+    val sb = StringBuilder()
+    quiz.questions.forEach { question ->
+        sb.append("# ").append(question.text).append("\n")
+        question.options.forEach { option ->
+            sb.append("- ").append(option).append("\n")
+        }
+        sb.append("\n")
+    }
+    return sb.toString().trim()
+}
+
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        setContent {
-            QuizApp()
-        }
+        setContent { QuizApp() }
     }
 }
 
@@ -81,9 +94,12 @@ class MainActivity : ComponentActivity() {
 fun QuizApp() {
     val context = LocalContext.current
     val dbHelper = remember { QuizDatabaseHelper(context) }
-    var currentScreen by remember { mutableStateOf("home") }
+    var currentScreen by remember { mutableStateOf("home") } // "home", "input", "edit", "quiz"
     var quizzes by remember { mutableStateOf(listOf<Quiz>()) }
     var selectedQuiz by remember { mutableStateOf<Quiz?>(null) }
+    var quizNameInput by remember { mutableStateOf("") }
+    var editingQuiz by remember { mutableStateOf<Quiz?>(null) }
+    val scope = rememberCoroutineScope()
     var quizTextInput by remember {
         mutableStateOf(
             """
@@ -102,9 +118,6 @@ fun QuizApp() {
         )
     }
 
-    var quizNameInput by remember { mutableStateOf("Mi Quiz") }
-    val scope = rememberCoroutineScope()
-
     // Carga los quizzes desde la base de datos al iniciar la app
     LaunchedEffect(Unit) {
         withContext(Dispatchers.IO) {
@@ -117,48 +130,95 @@ fun QuizApp() {
     when (currentScreen) {
         "home" -> HomeScreen(
             quizzes = quizzes,
-            onNewQuiz = { currentScreen = "input" },
+            onNewQuiz = {
+                quizNameInput = ""
+                quizTextInput = ""
+                editingQuiz = null
+                currentScreen = "input"
+            },
             onQuizSelected = { quiz ->
                 selectedQuiz = quiz
                 currentScreen = "quiz"
             },
             onShareQuiz = { quiz -> shareQuiz(context, quiz) },
-            onDownloadQuiz = { quiz -> downloadQuizAsTxt(context, quiz) }
-        )
-
-        "input" -> QuizInputScreen(
-            quizNameInput = quizNameInput,
-            onNameChanged = { quizNameInput = it },
-            quizTextInput = quizTextInput,
-            onTextChanged = { quizTextInput = it },
-            onStartQuiz = {
-                val quizQuestions = parseQuizText(quizTextInput)
-                if (quizQuestions.isNotEmpty()) {
-                    val newQuiz = Quiz(id = 0, name = quizNameInput, questions = quizQuestions)
-                    scope.launch {
-                        withContext(Dispatchers.IO) {
-                            val newId = dbHelper.insertQuiz(newQuiz)
-                            val insertedQuiz = newQuiz.copy(id = newId.toInt())
-                            quizzes = quizzes + insertedQuiz
-                            selectedQuiz = insertedQuiz
-                        }
-                        currentScreen = "quiz"
-                    }
-                }
+            onDownloadQuiz = { quiz -> downloadQuizAsTxt(context, quiz) },
+            onEditQuiz = { quiz ->
+                editingQuiz = quiz
+                quizNameInput = quiz.name
+                quizTextInput = generateQuizText(quiz)
+                currentScreen = "edit"
             },
-            onCancel = { currentScreen = "home" }
+            onDeleteQuiz = { quiz ->
+                scope.launch {
+                    withContext(Dispatchers.IO) {
+                        dbHelper.deleteQuiz(quiz.id)
+                    }
+                    quizzes = quizzes.filter { it.id != quiz.id }
+                }
+            }
         )
 
+        "input" -> {
+            // Pantalla para crear un nuevo quiz
+            QuizInputScreen(
+                quizNameInput = quizNameInput,
+                onNameChanged = { quizNameInput = it },
+                quizTextInput = quizTextInput,
+                onTextChanged = { quizTextInput = it },
+                onStartQuiz = {
+                    val questions = parseQuizText(quizTextInput)
+                    if (questions.isNotEmpty()) {
+                        val newQuiz = Quiz(id = 0, name = quizNameInput, questions = questions)
+                        scope.launch {
+                            withContext(Dispatchers.IO) {
+                                val newId = dbHelper.insertQuiz(newQuiz)
+                                val insertedQuiz = newQuiz.copy(id = newId.toInt())
+                                quizzes = quizzes + insertedQuiz
+                                selectedQuiz = insertedQuiz
+                            }
+                            currentScreen = "quiz"
+                        }
+                    }
+                },
+                onCancel = { currentScreen = "home" }
+            )
+        }
+
+        "edit" -> {
+            QuizInputScreen(
+                quizNameInput = quizNameInput,
+                onNameChanged = { quizNameInput = it },
+                quizTextInput = quizTextInput,
+                onTextChanged = { quizTextInput = it },
+                onStartQuiz = {
+                    val questions = parseQuizText(quizTextInput)
+                    if (questions.isNotEmpty() && editingQuiz != null) {
+                        val updatedQuiz =
+                            editingQuiz!!.copy(name = quizNameInput, questions = questions)
+                        scope.launch {
+                            withContext(Dispatchers.IO) {
+                                dbHelper.updateQuiz(updatedQuiz)
+                            }
+                            quizzes =
+                                quizzes.map { if (it.id == updatedQuiz.id) updatedQuiz else it }
+                            selectedQuiz = updatedQuiz
+                            currentScreen = "quiz"
+                        }
+                    }
+                },
+                onCancel = { currentScreen = "home" }
+            )
+        }
 
         "quiz" -> {
             selectedQuiz?.let { quiz ->
                 QuizViewScreen(quiz = quiz, onFinish = { responses ->
                     val updateQuiz = quiz.copy(responses = responses)
-                    LaunchedEffect(Unit) {
+                    scope.launch {
                         withContext(Dispatchers.IO) {
                             dbHelper.updateQuiz(updateQuiz)
                         }
-                        quizzes = quizzes.map { if (it.id == updateQuiz.id) updateQuiz else it }
+                        quizzes = quizzes.map { if (it.id == quiz.id) updateQuiz else it }
                         currentScreen = "home"
                     }
                 })
@@ -173,9 +233,10 @@ fun HomeScreen(
     onNewQuiz: () -> Unit,
     onQuizSelected: (Quiz) -> Unit,
     onShareQuiz: (Quiz) -> Unit,
-    onDownloadQuiz: (Quiz) -> Unit
+    onDownloadQuiz: (Quiz) -> Unit,
+    onEditQuiz: (Quiz) -> Unit,
+    onDeleteQuiz: (Quiz) -> Unit
 ) {
-    val context = LocalContext.current
     Scaffold(
         floatingActionButton = {
             FloatingActionButton(onClick = onNewQuiz) {
@@ -198,7 +259,9 @@ fun HomeScreen(
                             quiz = quiz,
                             onQuizSelected = { onQuizSelected(quiz) },
                             onShareQuiz = { onShareQuiz(quiz) },
-                            onDownloadQuiz = { onDownloadQuiz(quiz) }
+                            onDownloadQuiz = { onDownloadQuiz(quiz) },
+                            onEditQuiz = { onEditQuiz(quiz) },
+                            onDeleteQuiz = { onDeleteQuiz(quiz) }
                         )
                     }
                 }
@@ -212,7 +275,9 @@ fun QuizListItem(
     quiz: Quiz,
     onQuizSelected: () -> Unit,
     onShareQuiz: () -> Unit,
-    onDownloadQuiz: () -> Unit
+    onDownloadQuiz: () -> Unit,
+    onEditQuiz: () -> Unit,
+    onDeleteQuiz: () -> Unit
 ) {
     var expanded by remember { mutableStateOf(false) }
     Card(
@@ -245,6 +310,20 @@ fun QuizListItem(
                         onClick = {
                             expanded = false
                             onDownloadQuiz()
+                        }
+                    )
+                    DropdownMenuItem(
+                        text = { Text("Editar") },
+                        onClick = {
+                            expanded = false
+                            onEditQuiz()
+                        }
+                    )
+                    DropdownMenuItem(
+                        text = { Text("Eliminar") },
+                        onClick = {
+                            expanded = false
+                            onDeleteQuiz()
                         }
                     )
                 }
@@ -309,16 +388,12 @@ fun QuizInputScreen(
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun QuizViewScreen(quiz: Quiz, onFinish: @Composable (List<String>) -> Unit) {
+fun QuizViewScreen(quiz: Quiz, onFinish: (List<String>) -> Unit) {
     var currentQuestionIndex by remember { mutableIntStateOf(0) }
     var selectedOption by remember { mutableStateOf<String?>(null) }
     val responses = remember { mutableStateListOf<String>() }
 
-    Scaffold(
-        topBar = {
-            TopAppBar(title = { Text("Quiz: ${quiz.name}") })
-        }
-    ) { padding ->
+    Scaffold(topBar = { TopAppBar(title = { Text("Quiz: ${quiz.name}") }) }) { padding ->
         if (currentQuestionIndex < quiz.questions.size) {
             val currentQuestion = quiz.questions[currentQuestionIndex]
             Column(
@@ -366,10 +441,6 @@ fun QuizViewScreen(quiz: Quiz, onFinish: @Composable (List<String>) -> Unit) {
                 horizontalAlignment = Alignment.CenterHorizontally
             ) {
                 Text("¡Has terminado el quiz!", style = MaterialTheme.typography.titleMedium)
-//                Spacer(modifier = Modifier.height(16.dp))
-//                Button(onClick = onFinish) {
-//                    Text("Finalizar")
-//                }
             }
         }
     }
@@ -405,10 +476,21 @@ fun downloadQuizAsTxt(context: Context, quiz: Quiz) {
         }
     }
     val fileName = "${quiz.name}.txt"
-    // Se guarda el archivo en el directorio externo de la aplicación.
-    val file = File(context.getExternalFilesDir(null), fileName)
-    file.writeText(fileContent)
-    Toast.makeText(context, "Archivo descargado en: ${file.absolutePath}", Toast.LENGTH_LONG).show()
+    val contentValues = ContentValues().apply {
+        put(MediaStore.MediaColumns.DISPLAY_NAME, fileName)
+        put(MediaStore.MediaColumns.MIME_TYPE, "text/plain")
+        put(MediaStore.MediaColumns.RELATIVE_PATH, Environment.DIRECTORY_DOWNLOADS)
+    }
+    val resolver = context.contentResolver
+    val uri = resolver.insert(MediaStore.Downloads.EXTERNAL_CONTENT_URI, contentValues)
+    if (uri != null) {
+        resolver.openOutputStream(uri)?.use { outputStream ->
+            outputStream.write(fileContent.toByteArray())
+        }
+        Toast.makeText(context, "Archivo guardado en Downloads", Toast.LENGTH_LONG).show()
+    } else {
+        Toast.makeText(context, "Error al guardar el archivo", Toast.LENGTH_LONG).show()
+    }
 }
 
 @Preview(showBackground = true)
