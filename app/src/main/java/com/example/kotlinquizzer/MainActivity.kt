@@ -21,14 +21,9 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import java.io.File
-
-data class Question(val text: String, val options: List<String>)
-data class Quiz(
-    val id: Int,
-    val name: String,
-    val questions: List<Question>,
-    val responses: List<String> = emptyList()
-)
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 fun parseQuizText(quizText: String): List<Question> {
     val questions = mutableListOf<Question>()
@@ -84,6 +79,8 @@ class MainActivity : ComponentActivity() {
 
 @Composable
 fun QuizApp() {
+    val context = LocalContext.current
+    val dbHelper = remember { QuizDatabaseHelper(context) }
     var currentScreen by remember { mutableStateOf("home") }
     var quizzes by remember { mutableStateOf(listOf<Quiz>()) }
     var selectedQuiz by remember { mutableStateOf<Quiz?>(null) }
@@ -106,7 +103,16 @@ fun QuizApp() {
     }
 
     var quizNameInput by remember { mutableStateOf("Mi Quiz") }
-    val context = LocalContext.current
+    val scope = rememberCoroutineScope()
+
+    // Carga los quizzes desde la base de datos al iniciar la app
+    LaunchedEffect(Unit) {
+        withContext(Dispatchers.IO) {
+            val loaded = dbHelper.getAllQuizzes()
+            // Actualiza el hilo principal
+            quizzes = loaded
+        }
+    }
 
     when (currentScreen) {
         "home" -> HomeScreen(
@@ -128,14 +134,16 @@ fun QuizApp() {
             onStartQuiz = {
                 val quizQuestions = parseQuizText(quizTextInput)
                 if (quizQuestions.isNotEmpty()) {
-                    val newQuiz = Quiz(
-                        id = quizzes.size + 1,
-                        name = quizNameInput,
-                        questions = quizQuestions
-                    )
-                    quizzes = quizzes + newQuiz
-                    selectedQuiz = newQuiz
-                    currentScreen = "quiz"
+                    val newQuiz = Quiz(id = 0, name = quizNameInput, questions = quizQuestions)
+                    scope.launch {
+                        withContext(Dispatchers.IO) {
+                            val newId = dbHelper.insertQuiz(newQuiz)
+                            val insertedQuiz = newQuiz.copy(id = newId.toInt())
+                            quizzes = quizzes + insertedQuiz
+                            selectedQuiz = insertedQuiz
+                        }
+                        currentScreen = "quiz"
+                    }
                 }
             },
             onCancel = { currentScreen = "home" }
@@ -146,8 +154,13 @@ fun QuizApp() {
             selectedQuiz?.let { quiz ->
                 QuizViewScreen(quiz = quiz, onFinish = { responses ->
                     val updateQuiz = quiz.copy(responses = responses)
-                    quizzes = quizzes.map { if (it.id == updateQuiz.id) updateQuiz else it }
-                    currentScreen = "home"
+                    LaunchedEffect(Unit) {
+                        withContext(Dispatchers.IO) {
+                            dbHelper.updateQuiz(updateQuiz)
+                        }
+                        quizzes = quizzes.map { if (it.id == updateQuiz.id) updateQuiz else it }
+                        currentScreen = "home"
+                    }
                 })
             }
         }
@@ -296,7 +309,7 @@ fun QuizInputScreen(
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun QuizViewScreen(quiz: Quiz, onFinish: (List<String>) -> Unit) {
+fun QuizViewScreen(quiz: Quiz, onFinish: @Composable (List<String>) -> Unit) {
     var currentQuestionIndex by remember { mutableIntStateOf(0) }
     var selectedOption by remember { mutableStateOf<String?>(null) }
     val responses = remember { mutableStateListOf<String>() }
