@@ -39,39 +39,34 @@ sealed class Screen {
 
 fun parseQuizText(quizText: String): List<Question> {
     val questions = mutableListOf<Question>()
-    val questionPattern = Regex("""^\s*(?:#|\d+[.)])\s*(.+)$""")
-    val optionPattern = Regex("""^\s*[-•o]\s*(?:[a-zA-Z]\)?\s*)?(.*)$""")
-    var currentQuestionText: String? = null
+
+    val questionRegex = Regex("""^\s*(?:#|\d+[.)])\s*(.+)$""")
+    val optionRegex = Regex("""^\s*(?:(?:[-o]\s*[a-zA-Z][\.\)]\s*)|(?:[-•o]\s*)|(?:[a-zA-Z][\.\)]\s+))(.+)$""")
+    var currentQuestion: String? = null
     val currentOptions = mutableListOf<String>()
-    for (line in quizText.lines()) {
-        val trimmedLine = line.trim()
-        if (trimmedLine.isEmpty()) continue
-        val questionMatch = questionPattern.matchEntire(trimmedLine)
-        if (questionMatch != null) {
-            if (currentQuestionText != null) {
-                val labeledOptions = currentOptions.mapIndexed { index, option ->
-                    "${('a' + index)}) $option"
+
+    quizText.lines()
+        .map(String::trim)
+        .filter(String::isNotEmpty)
+        .forEach { line ->
+            questionRegex.matchEntire(line)?.let { match ->
+                if (currentQuestion != null && currentOptions.isNotEmpty()) {
+                    questions.add(Question(currentQuestion!!, currentOptions.toList()))
                 }
-                questions.add(Question(currentQuestionText, labeledOptions))
+                currentQuestion = match.groupValues[1].trim()
                 currentOptions.clear()
-            }
-            currentQuestionText = questionMatch.groupValues[1].trim()
-        } else {
-            val optionMatch = optionPattern.matchEntire(trimmedLine)
-            if (optionMatch != null) {
-                val optionText = optionMatch.groupValues[1].trim()
+            } ?: optionRegex.find(line)?.let { match ->
+                val optionText = match.groupValues[1].trim()
                 if (optionText.isNotEmpty()) {
                     currentOptions.add(optionText)
                 }
             }
         }
+
+    if (currentQuestion != null && currentOptions.isNotEmpty()) {
+        questions.add(Question(currentQuestion!!, currentOptions.toList()))
     }
-    if (currentQuestionText != null) {
-        val labeledOptions = currentOptions.mapIndexed { index, option ->
-            "${('a' + index)}) $option"
-        }
-        questions.add(Question(currentQuestionText, labeledOptions))
-    }
+
     return questions
 }
 
@@ -86,6 +81,7 @@ fun generateQuizText(quiz: Quiz): String {
     }
     return sb.toString().trim()
 }
+
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -394,12 +390,14 @@ fun QuizViewScreen(quiz: Quiz, onFinish: (List<String>) -> Unit, onCancel: () ->
     Scaffold(topBar = {
         TopAppBar(
             title = { Text("Quiz: ${quiz.name}") },
-            actions = { Text(
-                text = "${currentQuestionIndex + 1}/$questionCount",
-                modifier = Modifier
-                    .padding(end = 16.dp)
-                    .align(Alignment.CenterVertically)
-            )},
+            actions = {
+                Text(
+                    text = "${currentQuestionIndex + 1}/$questionCount",
+                    modifier = Modifier
+                        .padding(end = 16.dp)
+                        .align(Alignment.CenterVertically)
+                )
+            },
             navigationIcon = {
                 IconButton(onClick = onCancel) {
                     Icon(
@@ -481,7 +479,7 @@ fun shareQuiz(context: Context, quiz: Quiz) {
         quiz.questions.forEachIndexed { index, question ->
             append("${index + 1}. ${question.text}\n")
             if (quiz.responses.size > index) {
-                append("Respuesta: ${quiz.responses[index]}\n\n")
+                append("Respuesta (${'a' + index}): ${quiz.responses[index]}\n\n")
             } else {
                 append("Respuesta: \n\n")
             }
@@ -499,7 +497,7 @@ fun downloadQuizAsTxt(context: Context, quiz: Quiz) {
         quiz.questions.forEachIndexed { index, question ->
             append("${index + 1}. ${question.text}\n")
             if (quiz.responses.size > index) {
-                append("Respuesta: ${quiz.responses[index]}\n\n")
+                append("Respuesta (${'a' + index}): ${quiz.responses[index]}\n\n")
             } else {
                 append("Respuesta: \n\n")
             }
