@@ -20,6 +20,7 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
@@ -28,10 +29,10 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
 sealed class Screen {
-    data object Home: Screen()
-    data object Input: Screen()
-    data object Edit: Screen()
-    data object Quiz: Screen()
+    data object Home : Screen()
+    data object Input : Screen()
+    data object Edit : Screen()
+    data object Quiz : Screen()
 }
 
 fun parseQuizText(quizText: String): List<Question> {
@@ -141,6 +142,7 @@ fun QuizApp() {
                 }
             }
         )
+
         Screen.Input -> {
             QuizInputScreen(
                 quizNameInput = quizNameInput,
@@ -165,6 +167,7 @@ fun QuizApp() {
                 onCancel = { currentScreen = Screen.Home }
             )
         }
+
         Screen.Edit -> {
             QuizInputScreen(
                 quizNameInput = quizNameInput,
@@ -174,12 +177,14 @@ fun QuizApp() {
                 onStartQuiz = {
                     val questions = parseQuizText(quizTextInput)
                     if (questions.isNotEmpty() && editingQuiz != null) {
-                        val updatedQuiz = editingQuiz!!.copy(name = quizNameInput, questions = questions)
+                        val updatedQuiz =
+                            editingQuiz!!.copy(name = quizNameInput, questions = questions)
                         scope.launch {
                             withContext(Dispatchers.IO) {
                                 dbHelper.updateQuiz(updatedQuiz)
                             }
-                            quizzes = quizzes.map { if (it.id == updatedQuiz.id) updatedQuiz else it }
+                            quizzes =
+                                quizzes.map { if (it.id == updatedQuiz.id) updatedQuiz else it }
                             selectedQuiz = updatedQuiz
                             currentScreen = Screen.Quiz
                         }
@@ -188,6 +193,7 @@ fun QuizApp() {
                 onCancel = { currentScreen = Screen.Home }
             )
         }
+
         Screen.Quiz -> {
             selectedQuiz?.let { quiz ->
                 QuizViewScreen(quiz = quiz, onFinish = { responses ->
@@ -382,18 +388,11 @@ fun QuizViewScreen(quiz: Quiz, onFinish: (List<String>) -> Unit) {
                 Text(text = currentQuestion.text, style = MaterialTheme.typography.titleMedium)
                 Spacer(modifier = Modifier.height(16.dp))
                 currentQuestion.options.forEach { option ->
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .clickable { selectedOption = option }
-                            .padding(vertical = 4.dp)
-                    ) {
-                        RadioButton(
-                            selected = selectedOption == option,
-                            onClick = { selectedOption = option }
-                        )
-                        Text(text = option, modifier = Modifier.padding(start = 8.dp))
-                    }
+                    QuizOptionItem(
+                        optionText = option,
+                        selected = (selectedOption == option),
+                        onClick = { selectedOption = option }
+                    )
                 }
                 Spacer(modifier = Modifier.height(16.dp))
                 Button(
@@ -468,6 +467,43 @@ fun downloadQuizAsTxt(context: Context, quiz: Quiz) {
         Toast.makeText(context, "Archivo guardado en Downloads", Toast.LENGTH_LONG).show()
     } else {
         Toast.makeText(context, "Error al guardar el archivo", Toast.LENGTH_LONG).show()
+    }
+}
+
+@Composable
+fun QuizOptionItem(
+    optionText: String,
+    selected: Boolean,
+    onClick: () -> Unit
+) {
+    Card(
+        shape = MaterialTheme.shapes.medium,
+        elevation = CardDefaults.cardElevation(
+            defaultElevation = 2.dp
+        ),
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(vertical = 4.dp)
+            .clickable { onClick() }
+    ) {
+        Row(
+            modifier = Modifier.padding(16.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            RadioButton(
+                selected = selected,
+                onClick = { onClick() },
+                colors = RadioButtonDefaults.colors(
+                    selectedColor = MaterialTheme.colorScheme.primary,
+                    unselectedColor = Color.Gray
+                )
+            )
+            Spacer(modifier = Modifier.width(8.dp))
+            Text(
+                text = optionText,
+                style = MaterialTheme.typography.bodyMedium
+            )
+        }
     }
 }
 
