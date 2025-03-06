@@ -475,16 +475,7 @@ fun QuizViewScreen(quiz: Quiz, onFinish: (List<String>) -> Unit, onCancel: () ->
 }
 
 fun shareQuiz(context: Context, quiz: Quiz) {
-    val shareText = buildString {
-        quiz.questions.forEachIndexed { index, question ->
-            append("${index + 1}. ${question.text}\n")
-            if (quiz.responses.size > index) {
-                append("Respuesta (${'a' + index}): ${quiz.responses[index]}\n\n")
-            } else {
-                append("Respuesta: \n\n")
-            }
-        }
-    }
+    val shareText = buildQuizContent(quiz)
     val shareIntent = Intent(Intent.ACTION_SEND).apply {
         type = "text/plain"
         putExtra(Intent.EXTRA_TEXT, shareText)
@@ -493,16 +484,7 @@ fun shareQuiz(context: Context, quiz: Quiz) {
 }
 
 fun downloadQuizAsTxt(context: Context, quiz: Quiz) {
-    val fileContent = buildString {
-        quiz.questions.forEachIndexed { index, question ->
-            append("${index + 1}. ${question.text}\n")
-            if (quiz.responses.size > index) {
-                append("Respuesta (${'a' + index}): ${quiz.responses[index]}\n\n")
-            } else {
-                append("Respuesta: \n\n")
-            }
-        }
-    }
+    val fileContent = buildQuizContent(quiz)
     val fileName = "${quiz.name}.txt"
     val contentValues = ContentValues().apply {
         put(MediaStore.MediaColumns.DISPLAY_NAME, fileName)
@@ -518,6 +500,22 @@ fun downloadQuizAsTxt(context: Context, quiz: Quiz) {
         Toast.makeText(context, "Archivo guardado en Downloads", Toast.LENGTH_LONG).show()
     } else {
         Toast.makeText(context, "Error al guardar el archivo", Toast.LENGTH_LONG).show()
+    }
+}
+
+fun buildQuizContent(quiz: Quiz): String {
+    return buildString {
+        quiz.questions.forEachIndexed { index, question ->
+            append("${index + 1}. ${question.text}\n")
+            if (quiz.responses.size > index && quiz.responses[index].isNotBlank()) {
+                val response = quiz.responses[index]
+                val optionIndex = question.options.indexOf(response)
+                val letter = if (optionIndex != -1) ('a' + optionIndex) else '?'
+                append("Respuesta ($letter): $response\n\n")
+            } else {
+                append("Respuesta: \n\n")
+            }
+        }
     }
 }
 
