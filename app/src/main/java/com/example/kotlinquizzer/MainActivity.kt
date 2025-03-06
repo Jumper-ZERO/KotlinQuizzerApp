@@ -440,7 +440,7 @@ fun QuizViewScreen(quiz: Quiz, onFinish: (List<String>) -> Unit, onCancel: () ->
                         },
                         enabled = currentQuestionIndex > 0
                     ) {
-                        Text("Anterio")
+                        Text("Anterior")
                     }
 
                     Button(
