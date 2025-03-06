@@ -474,6 +474,49 @@ fun QuizViewScreen(quiz: Quiz, onFinish: (List<String>) -> Unit, onCancel: () ->
     }
 }
 
+@Composable
+fun QuizOptionItem(
+    optionText: String,
+    selected: Boolean,
+    onClick: () -> Unit
+) {
+    Card(
+        shape = MaterialTheme.shapes.medium,
+        elevation = CardDefaults.cardElevation(
+            defaultElevation = 2.dp
+        ),
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(vertical = 4.dp)
+            .clickable { onClick() }
+    ) {
+        Row(
+            modifier = Modifier.padding(16.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            RadioButton(
+                selected = selected,
+                onClick = { onClick() },
+                colors = RadioButtonDefaults.colors(
+                    selectedColor = MaterialTheme.colorScheme.primary,
+                    unselectedColor = Color.Gray
+                )
+            )
+            Spacer(modifier = Modifier.width(8.dp))
+            Text(
+                text = optionText,
+                style = MaterialTheme.typography.bodyMedium
+            )
+        }
+    }
+}
+
+@Preview(showBackground = true)
+@Composable
+fun PreviewDefault() {
+    QuizApp()
+}
+
 fun shareQuiz(context: Context, quiz: Quiz) {
     val shareText = buildQuizContent(quiz)
     val shareIntent = Intent(Intent.ACTION_SEND).apply {
@@ -518,47 +561,3 @@ fun buildQuizContent(quiz: Quiz): String {
         }
     }
 }
-
-@Composable
-fun QuizOptionItem(
-    optionText: String,
-    selected: Boolean,
-    onClick: () -> Unit
-) {
-    Card(
-        shape = MaterialTheme.shapes.medium,
-        elevation = CardDefaults.cardElevation(
-            defaultElevation = 2.dp
-        ),
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(vertical = 4.dp)
-            .clickable { onClick() }
-    ) {
-        Row(
-            modifier = Modifier.padding(16.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            RadioButton(
-                selected = selected,
-                onClick = { onClick() },
-                colors = RadioButtonDefaults.colors(
-                    selectedColor = MaterialTheme.colorScheme.primary,
-                    unselectedColor = Color.Gray
-                )
-            )
-            Spacer(modifier = Modifier.width(8.dp))
-            Text(
-                text = optionText,
-                style = MaterialTheme.typography.bodyMedium
-            )
-        }
-    }
-}
-
-@Preview(showBackground = true)
-@Composable
-fun PreviewDefault() {
-    QuizApp()
-}
-
