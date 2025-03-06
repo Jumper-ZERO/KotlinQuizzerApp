@@ -8,12 +8,14 @@ import android.os.Environment
 import android.provider.MediaStore
 import android.widget.Toast
 import androidx.activity.ComponentActivity
+import androidx.activity.compose.BackHandler
 import androidx.activity.compose.setContent
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material3.*
@@ -196,16 +198,19 @@ fun QuizApp() {
 
         Screen.Quiz -> {
             selectedQuiz?.let { quiz ->
-                QuizViewScreen(quiz = quiz, onFinish = { responses ->
-                    val updatedQuiz = quiz.copy(responses = responses)
-                    scope.launch {
-                        withContext(Dispatchers.IO) {
-                            dbHelper.updateQuiz(updatedQuiz)
+                QuizViewScreen(
+                    quiz = quiz, onFinish = { responses ->
+                        val updatedQuiz = quiz.copy(responses = responses)
+                        scope.launch {
+                            withContext(Dispatchers.IO) {
+                                dbHelper.updateQuiz(updatedQuiz)
+                            }
+                            quizzes = quizzes.map { if (it.id == quiz.id) updatedQuiz else it }
+                            currentScreen = Screen.Home
                         }
-                        quizzes = quizzes.map { if (it.id == quiz.id) updatedQuiz else it }
-                        currentScreen = Screen.Home
-                    }
-                })
+                    },
+                    onCancel = { currentScreen = Screen.Home }
+                )
             }
         }
     }
@@ -372,7 +377,7 @@ fun QuizInputScreen(
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun QuizViewScreen(quiz: Quiz, onFinish: (List<String>) -> Unit) {
+fun QuizViewScreen(quiz: Quiz, onFinish: (List<String>) -> Unit, onCancel: () -> Unit) {
     val questionCount = quiz.questions.size
     var currentQuestionIndex by remember { mutableIntStateOf(0) }
     val responses = remember { MutableList<String?>(questionCount) { null } }
@@ -380,6 +385,10 @@ fun QuizViewScreen(quiz: Quiz, onFinish: (List<String>) -> Unit) {
 
     LaunchedEffect(currentQuestionIndex) {
         selectedOption = responses[currentQuestionIndex]
+    }
+
+    BackHandler {
+        onCancel()
     }
 
     Scaffold(topBar = {
@@ -390,7 +399,15 @@ fun QuizViewScreen(quiz: Quiz, onFinish: (List<String>) -> Unit) {
                 modifier = Modifier
                     .padding(end = 16.dp)
                     .align(Alignment.CenterVertically)
-            ) }
+            )},
+            navigationIcon = {
+                IconButton(onClick = onCancel) {
+                    Icon(
+                        imageVector = Icons.AutoMirrored.Filled.ArrowBack,
+                        contentDescription = "Regresar al Home"
+                    )
+                }
+            }
         )
     }) { padding ->
         if (currentQuestionIndex < quiz.questions.size) {
