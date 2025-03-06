@@ -41,7 +41,7 @@ fun parseQuizText(quizText: String): List<Question> {
     val questions = mutableListOf<Question>()
 
     val questionRegex = Regex("""^\s*(?:#|\d+[.)])\s*(.+)$""")
-    val optionRegex = Regex("""^\s*(?:(?:[-o]\s*[a-zA-Z][\.\)]\s*)|(?:[-•o]\s*)|(?:[a-zA-Z][\.\)]\s+))(.+)$""")
+    val optionRegex = Regex("""^\s*(?:[-o]\s*[a-zA-Z][.)]\s*|[-•o]\s*|[a-zA-Z][.)]\s+)(.+)$""")
     var currentQuestion: String? = null
     val currentOptions = mutableListOf<String>()
 
