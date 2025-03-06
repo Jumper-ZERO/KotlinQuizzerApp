@@ -8,12 +8,7 @@ import org.json.JSONArray
 import org.json.JSONObject
 
 data class Question(val text: String, val options: List<String>)
-data class Quiz(
-    val id: Int,
-    val name: String,
-    val questions: List<Question>,
-    val responses: List<String> = emptyList()
-)
+data class Quiz(val id: Int, val name: String, val questions: List<Question>, val responses: List<String> = emptyList())
 
 class QuizDatabaseHelper(context: Context) :
     SQLiteOpenHelper(context, DATABASE_NAME, null, DATABASE_VERSION) {
@@ -89,8 +84,6 @@ class QuizDatabaseHelper(context: Context) :
         return list
     }
 
-    // -- CRUD
-
     fun insertQuiz(quiz: Quiz): Long {
         val db = writableDatabase
         val values = ContentValues().apply {
@@ -110,7 +103,7 @@ class QuizDatabaseHelper(context: Context) :
             put(COLUMN_QUESTIONS, questionsToJson(quiz.questions))
             put(COLUMN_RESPONSES, responsesToJson(quiz.responses))
         }
-        val rows = db.update(TABLE_QUIZZES, values, "$COLUMN_ID=?", arrayOf(quiz.id.toString()))
+        val rows = db.update(TABLE_QUIZZES, values, "$COLUMN_ID = ?", arrayOf(quiz.id.toString()))
         db.close()
         return rows
     }

@@ -23,28 +23,31 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
-import java.io.File
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+
+sealed class Screen {
+    data object Home: Screen()
+    data object Input: Screen()
+    data object Edit: Screen()
+    data object Quiz: Screen()
+}
 
 fun parseQuizText(quizText: String): List<Question> {
     val questions = mutableListOf<Question>()
     val questionPattern = Regex("""^\s*(?:#|\d+[.)])\s*(.+)$""")
     val optionPattern = Regex("""^\s*[-•o]\s*(?:[a-zA-Z]\)?\s*)?(.*)$""")
-
     var currentQuestionText: String? = null
     val currentOptions = mutableListOf<String>()
-
     for (line in quizText.lines()) {
         val trimmedLine = line.trim()
         if (trimmedLine.isEmpty()) continue
-
         val questionMatch = questionPattern.matchEntire(trimmedLine)
         if (questionMatch != null) {
             if (currentQuestionText != null) {
                 val labeledOptions = currentOptions.mapIndexed { index, option ->
-                    "${('a' + index)} $option"
+                    "${('a' + index)}) $option"
                 }
                 questions.add(Question(currentQuestionText, labeledOptions))
                 currentOptions.clear()
@@ -60,14 +63,12 @@ fun parseQuizText(quizText: String): List<Question> {
             }
         }
     }
-
     if (currentQuestionText != null) {
         val labeledOptions = currentOptions.mapIndexed { index, option ->
-            "${('a' + index)} $option"
+            "${('a' + index)}) $option"
         }
         questions.add(Question(currentQuestionText, labeledOptions))
     }
-
     return questions
 }
 
@@ -94,35 +95,34 @@ class MainActivity : ComponentActivity() {
 fun QuizApp() {
     val context = LocalContext.current
     val dbHelper = remember { QuizDatabaseHelper(context) }
-    var currentScreen by remember { mutableStateOf("home") } // "home", "input", "edit", "quiz"
+    var currentScreen by remember { mutableStateOf<Screen>(Screen.Home) }
     var quizzes by remember { mutableStateOf(listOf<Quiz>()) }
     var selectedQuiz by remember { mutableStateOf<Quiz?>(null) }
     var quizNameInput by remember { mutableStateOf("") }
+    var quizTextInput by remember { mutableStateOf("") }
     var editingQuiz by remember { mutableStateOf<Quiz?>(null) }
     val scope = rememberCoroutineScope()
-    var quizTextInput by remember { mutableStateOf("") }
 
-    // Carga los quizzes desde la base de datos al iniciar la app
+    // Cargamos los quizzes desde la base de datos
     LaunchedEffect(Unit) {
         withContext(Dispatchers.IO) {
             val loaded = dbHelper.getAllQuizzes()
-            // Actualiza el hilo principal
             quizzes = loaded
         }
     }
 
     when (currentScreen) {
-        "home" -> HomeScreen(
+        Screen.Home -> HomeScreen(
             quizzes = quizzes,
             onNewQuiz = {
                 quizNameInput = ""
                 quizTextInput = ""
                 editingQuiz = null
-                currentScreen = "input"
+                currentScreen = Screen.Input
             },
             onQuizSelected = { quiz ->
                 selectedQuiz = quiz
-                currentScreen = "quiz"
+                currentScreen = Screen.Quiz
             },
             onShareQuiz = { quiz -> shareQuiz(context, quiz) },
             onDownloadQuiz = { quiz -> downloadQuizAsTxt(context, quiz) },
@@ -130,7 +130,7 @@ fun QuizApp() {
                 editingQuiz = quiz
                 quizNameInput = quiz.name
                 quizTextInput = generateQuizText(quiz)
-                currentScreen = "edit"
+                currentScreen = Screen.Edit
             },
             onDeleteQuiz = { quiz ->
                 scope.launch {
@@ -141,9 +141,7 @@ fun QuizApp() {
                 }
             }
         )
-
-        "input" -> {
-            // Pantalla para crear un nuevo quiz
+        Screen.Input -> {
             QuizInputScreen(
                 quizNameInput = quizNameInput,
                 onNameChanged = { quizNameInput = it },
@@ -160,15 +158,14 @@ fun QuizApp() {
                                 quizzes = quizzes + insertedQuiz
                                 selectedQuiz = insertedQuiz
                             }
-                            currentScreen = "quiz"
+                            currentScreen = Screen.Quiz
                         }
                     }
                 },
-                onCancel = { currentScreen = "home" }
+                onCancel = { currentScreen = Screen.Home }
             )
         }
-
-        "edit" -> {
+        Screen.Edit -> {
             QuizInputScreen(
                 quizNameInput = quizNameInput,
                 onNameChanged = { quizNameInput = it },
@@ -177,33 +174,30 @@ fun QuizApp() {
                 onStartQuiz = {
                     val questions = parseQuizText(quizTextInput)
                     if (questions.isNotEmpty() && editingQuiz != null) {
-                        val updatedQuiz =
-                            editingQuiz!!.copy(name = quizNameInput, questions = questions)
+                        val updatedQuiz = editingQuiz!!.copy(name = quizNameInput, questions = questions)
                         scope.launch {
                             withContext(Dispatchers.IO) {
                                 dbHelper.updateQuiz(updatedQuiz)
                             }
-                            quizzes =
-                                quizzes.map { if (it.id == updatedQuiz.id) updatedQuiz else it }
+                            quizzes = quizzes.map { if (it.id == updatedQuiz.id) updatedQuiz else it }
                             selectedQuiz = updatedQuiz
-                            currentScreen = "quiz"
+                            currentScreen = Screen.Quiz
                         }
                     }
                 },
-                onCancel = { currentScreen = "home" }
+                onCancel = { currentScreen = Screen.Home }
             )
         }
-
-        "quiz" -> {
+        Screen.Quiz -> {
             selectedQuiz?.let { quiz ->
                 QuizViewScreen(quiz = quiz, onFinish = { responses ->
-                    val updateQuiz = quiz.copy(responses = responses)
+                    val updatedQuiz = quiz.copy(responses = responses)
                     scope.launch {
                         withContext(Dispatchers.IO) {
-                            dbHelper.updateQuiz(updateQuiz)
+                            dbHelper.updateQuiz(updatedQuiz)
                         }
-                        quizzes = quizzes.map { if (it.id == quiz.id) updateQuiz else it }
-                        currentScreen = "home"
+                        quizzes = quizzes.map { if (it.id == quiz.id) updatedQuiz else it }
+                        currentScreen = Screen.Home
                     }
                 })
             }
