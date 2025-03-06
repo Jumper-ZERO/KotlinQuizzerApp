@@ -373,9 +373,14 @@ fun QuizInputScreen(
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun QuizViewScreen(quiz: Quiz, onFinish: (List<String>) -> Unit) {
+    val questionCount = quiz.questions.size
     var currentQuestionIndex by remember { mutableIntStateOf(0) }
+    val responses = remember { MutableList<String?>(questionCount) { null } }
     var selectedOption by remember { mutableStateOf<String?>(null) }
-    val responses = remember { mutableStateListOf<String>() }
+
+    LaunchedEffect(currentQuestionIndex) {
+        selectedOption = responses[currentQuestionIndex]
+    }
 
     Scaffold(topBar = { TopAppBar(title = { Text("Quiz: ${quiz.name}") }) }) { padding ->
         if (currentQuestionIndex < quiz.questions.size) {
@@ -391,25 +396,46 @@ fun QuizViewScreen(quiz: Quiz, onFinish: (List<String>) -> Unit) {
                     QuizOptionItem(
                         optionText = option,
                         selected = (selectedOption == option),
-                        onClick = { selectedOption = option }
+                        onClick = {
+                            selectedOption = option
+                            responses[currentQuestionIndex] = option
+                        }
                     )
                 }
                 Spacer(modifier = Modifier.height(16.dp))
-                Button(
-                    onClick = {
-                        if (selectedOption != null) {
-                            responses.add(selectedOption!!)
-                            currentQuestionIndex++
-                            selectedOption = null
-                        }
-                    },
-                    enabled = selectedOption != null
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween
                 ) {
-                    Text("Siguiente")
+                    Button(
+                        onClick = {
+                            if (currentQuestionIndex > 0) {
+                                currentQuestionIndex--
+                            }
+                        },
+                        enabled = currentQuestionIndex > 0
+                    ) {
+                        Text("Anterio")
+                    }
+
+                    Button(
+                        onClick = {
+                            if (currentQuestionIndex < questionCount - 1) {
+                                currentQuestionIndex++
+                            } else {
+                                onFinish(responses.map { it ?: "" })
+                            }
+                        },
+                        enabled = selectedOption != null
+                    ) {
+                        Text(
+                            if (currentQuestionIndex < questionCount - 1) "Siguiente" else "Finalizar"
+                        )
+                    }
                 }
             }
         } else {
-            onFinish(responses)
+            onFinish(responses.map { it ?: "" })
             Column(
                 modifier = Modifier
                     .padding(padding)
