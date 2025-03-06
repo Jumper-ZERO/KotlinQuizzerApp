@@ -382,7 +382,17 @@ fun QuizViewScreen(quiz: Quiz, onFinish: (List<String>) -> Unit) {
         selectedOption = responses[currentQuestionIndex]
     }
 
-    Scaffold(topBar = { TopAppBar(title = { Text("Quiz: ${quiz.name}") }) }) { padding ->
+    Scaffold(topBar = {
+        TopAppBar(
+            title = { Text("Quiz: ${quiz.name}") },
+            actions = { Text(
+                text = "${currentQuestionIndex + 1}/$questionCount",
+                modifier = Modifier
+                    .padding(end = 16.dp)
+                    .align(Alignment.CenterVertically)
+            ) }
+        )
+    }) { padding ->
         if (currentQuestionIndex < quiz.questions.size) {
             val currentQuestion = quiz.questions[currentQuestionIndex]
             Column(
